@@ -11,7 +11,8 @@ ACLA + ANODE/
 ├── B2_update_meta_user_car.py      # Cập nhật metadata xe và người dùng
 ├── B3_train_acla_anode.py          # Training mô hình ACLA + ANODE
 ├── B4_train_acla_anode_group.py    # Training theo nhóm
-├── B5_prepocessing_infer.py        # Tiền xử lý cho inference
+├── B5a_prepocessing_infer.py        # Tiền xử lý cho inference
+|__ B5b_update_meta_user_car_infer.py # Cập nhật metadata xe và người dùng cho inference
 ├── B6_inference.py                  # Inference cơ bản
 ├── B6_inference_v2_mc.py           # Inference với MC Dropout
 ├── B7_plot_result.py                # Vẽ biểu đồ kết quả
