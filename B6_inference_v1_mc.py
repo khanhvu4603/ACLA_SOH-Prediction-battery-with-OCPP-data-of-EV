@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-B5 - Inference for ACLA + ANODE (Hướng 2: sau phiên sạc)
---------------------------------------------------------
-• Dùng checkpoint đã train (acla_anode_best.pt) từ các script B3/B4 của bạn.
-• Nhận dữ liệu mới ở dạng NPZ từ pipeline tiền xử lý (giống training):
+B5 - Inference for ACLA + ANODE (Hướng 2: sau phiên sạc) + MC Dropout
+---------------------------------------------------------------------
+• Dùng checkpoint đã train (acla_anode_best.pt) từ B3/B4.
+• Nhận NPZ mới (giống định dạng training):
     - X: (N, 61, C)
-    - features: list tên kênh (để kiểm tra thứ tự)
-    - (tùy chọn) y: nếu có thì sẽ tính RMSE để backtest
-• Áp dụng chuẩn hoá per-feature bằng thống kê TRAIN lưu sẵn trong checkpoint.
-• Xuất kết quả ra CSV.
+    - features: list kênh
+    - (tuỳ chọn) y: nếu có sẽ tính RMSE/MAE
+• Áp dụng chuẩn hoá per-feature bằng thống kê TRAIN lưu trong ckpt.
+• Hỗ trợ **MC Dropout**: chạy nhiều lần forward để lấy **soh_pred_mean** và **soh_pred_std**.
 
 Cách dùng:
   1) Sửa CONFIG bên dưới (đường dẫn ckpt & npz input)
-  2) Chạy:  python B5_infer_acla_anode.py
+  2) Chạy:  python B6_inference_v1_mc.py
+
+Lưu ý:
+  - MC Dropout chỉ phát huy khi mô hình có các lớp Dropout. Nếu kiến trúc hiện tại
+    không dùng dropout thì std sẽ ≈ 0. Có thể thêm Dropout trong CNN/LSTM ở phiên bản train tiếp theo.
 
 Yêu cầu:
   pip install torch numpy pandas torchdiffeq
@@ -21,10 +25,11 @@ Yêu cầu:
 
 # =========================
 # CONFIG (edit here)
+# =========================
 CKPT_PATH  = r"E:\ACLA + ANODE\weight\acla_anode_best_v1.pt"         # checkpoint đã train
-NPZ_INPUT  = r"E:\ACLA + ANODE\output_infer\ocpp_lstm_infer.npz"     # npz mới
-META_PATH  = r"E:\ACLA + ANODE\output_infer\ocpp_lstm_sessions_with_user_car.csv"   # (tuỳ chọn)
-OUT_CSV    = r"E:\ACLA + ANODE\soh_predictions_mc_with_ids_v2.csv"
+NPZ_INPUT  = r"E:\ACLA + ANODE\output_infer\ocpp_lstm_infer.npz"    # npz mới (VD từ DC_thang5_2025 preprocess)
+META_PATH  = r"E:\ACLA + ANODE\output_infer\ocpp_lstm_sessions_with_user_car.csv"   # (tuỳ chọn) csv meta cùng thứ tự hàng để ghép car_model,...
+OUT_CSV    = r"E:\ACLA + ANODE/soh_predictions_mc.csv"
 USE_CPU    = False
 
 # MC Dropout
@@ -138,15 +143,7 @@ def load_npz(npz_path: str):
     X = data["X"].astype(np.float32)               # (N,61,C)
     y = data["y"].astype(np.float32) if "y" in data.files else None
     features = list(data["features"]) if "features" in data.files else None
-
-    # Các id/meta nếu có trong npz
-    # Lưu ý: tuỳ B1_preprocess mà có/không, nên cần .get() an toàn
-    id_fields = {}
-    for key in ["session_id", "car_id", "user_id", "car_model_id", "car_model_name", "car_type"]:
-        if key in data.files:
-            id_fields[key] = data[key]
-
-    return X, y, features, id_fields
+    return X, y, features
 
 
 def apply_normalization(X: torch.Tensor, mu: np.ndarray, std: np.ndarray) -> torch.Tensor:
@@ -195,51 +192,6 @@ def predict_mc(model: nn.Module, X: torch.Tensor, mc_samples: int, batch_size: i
     return all_mean, all_std
 
 
-def merge_meta(df_pred: pd.DataFrame, meta_path: str | None, id_fields: dict) -> pd.DataFrame:
-    if id_fields:
-        # Đưa các id từ npz vào ngay từ đầu (nếu có)
-        for k, v in id_fields.items():
-            try:
-                # v có thể là object/bytes → chuyển sang Series an toàn
-                df_pred[k] = pd.Series(v).reset_index(drop=True)
-            except Exception:
-                pass
-
-    if not meta_path:
-        return df_pred
-
-    try:
-        meta = pd.read_csv(meta_path)
-    except Exception as e:
-        print(f"[WARN] Không đọc được META_PATH: {e}")
-        return df_pred
-
-    # Ưu tiên 1: merge theo 'session_id' nếu có ở cả hai
-    if ("session_id" in meta.columns) and ("session_id" in df_pred.columns):
-        before = len(df_pred)
-        df_merged = df_pred.merge(meta, on="session_id", how="left", suffixes=("", "_meta"))
-        print(f"[META] Merge by session_id: {before} rows -> {len(df_merged)} rows")
-        return df_merged
-
-    # Ưu tiên 2: merge theo 'row_idx' nếu có trong meta
-    if "row_idx" in meta.columns:
-        meta2 = meta.copy()
-        meta2["index"] = meta2["row_idx"].astype(int)
-        before = len(df_pred)
-        df_merged = df_pred.merge(meta2.drop(columns=["row_idx"]), on="index", how="left", suffixes=("", "_meta"))
-        print(f"[META] Merge by row_idx/index: {before} rows -> {len(df_merged)} rows")
-        return df_merged
-
-    # Fall-back: nếu số dòng khớp → ghép theo thứ tự
-    if len(meta) == len(df_pred):
-        df_merged = pd.concat([df_pred.reset_index(drop=True), meta.reset_index(drop=True)], axis=1)
-        print(f"[META] Concat by order (no key). Rows={len(df_merged)}")
-        return df_merged
-
-    print("[WARN] META không có khoá (session_id/row_idx) và số dòng không khớp → bỏ qua merge.")
-    return df_pred
-
-
 def main():
     device = torch.device("cpu" if USE_CPU or not torch.cuda.is_available() else "cuda")
 
@@ -250,11 +202,9 @@ def main():
     print(f"[INFO] val_RMSE(best) = {ckpt.get('val_rmse', 'N/A')} | epoch = {ckpt.get('epoch', 'N/A')}")
 
     # 2) Load new data
-    X_np, y_np, features, id_fields = load_npz(NPZ_INPUT)
+    X_np, y_np, features = load_npz(NPZ_INPUT)
     N, T, C = X_np.shape
     print(f"[LOAD] NPZ: {NPZ_INPUT} | X shape={X_np.shape} | y={'yes' if y_np is not None else 'no'}")
-    if id_fields:
-        print(f"[INFO] Found id fields in NPZ: {list(id_fields.keys())}")
 
     # 3) Build model with config from ckpt
     model = ACLA_ANODE(
@@ -276,7 +226,7 @@ def main():
     # 5) MC predictions
     mean_pred, std_pred = predict_mc(model, X, mc_samples=MC_SAMPLES, batch_size=BATCH_SIZE)
 
-    # 6) Build output table (kèm SOH true nếu có)
+    # 6) Build output table
     out = {"index": np.arange(N), "soh_pred_mean": mean_pred, "soh_pred_std": std_pred}
     if y_np is not None:
         out["soh_true"] = y_np
@@ -285,10 +235,18 @@ def main():
 
     df = pd.DataFrame(out)
 
-    # 7) Merge meta/session/vehicle
-    df = merge_meta(df, META_PATH, id_fields)
+    # (optional) merge meta for car_model if provided
+    if META_PATH:
+        try:
+            meta = pd.read_csv(META_PATH)
+            if len(meta) == N:
+                df = pd.concat([df, meta.reset_index(drop=True)], axis=1)
+            else:
+                print(f"[WARN] META rows ({len(meta)}) != N ({N}). Bỏ qua merge.")
+        except Exception as e:
+            print(f"[WARN] Không thể đọc META: {e}")
 
-    # 8) Summaries
+    # 7) Summaries
     if "soh_true" in df.columns:
         rmse = rmse_np(df["soh_pred_mean"].values, df["soh_true"].values)
         mae  = float(np.mean(np.abs(df["soh_pred_mean"].values - df["soh_true"].values)))
@@ -298,7 +256,7 @@ def main():
         print("[METRIC] y_true không có trong NPZ mới → chỉ xuất dự báo.")
         print(f"[NOTE] Trung bình std (uncertainty): {df['soh_pred_std'].mean():.4f}")
 
-    # 9) Save CSV
+    # 8) Save CSV
     out_path = Path(OUT_CSV)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_path, index=False, encoding="utf-8")

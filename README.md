@@ -1,7 +1,7 @@
 # ACLA + ANODE: Battery State of Health (SOH) Prediction
 
 ## Mô tả
-Project này sử dụng mô hình ACLA (Attention-based Convolutional LSTM with Augmentation) kết hợp ANODE (Augmented Neural Ordinary Differential Equations) để dự đoán trạng thái sức khỏe (SOH) của pin xe điện từ dữ liệu OCPP (Open Charge Point Protocol).
+Project này sử dụng mô hình ACLA (Attention-based Convolutional LSTM with Augmented Neural Ordinary Differential Equations) để dự đoán trạng thái sức khỏe (SOH) của pin xe điện từ dữ liệu OCPP (Open Charge Point Protocol).
 
 ## Cấu trúc Project
 
@@ -37,17 +37,33 @@ pip install torch numpy pandas torchdiffeq matplotlib scikit-learn
 
 ## Cách sử dụng
 
-### 1. Training
+### 1. Preprocessing
+```bash
+python B1_preprocessing.py
+``` 
+
+### 2. Update with user_id and car_model_id
+```bash
+python B2_update_meta_car.py
+``` 
+
+### 3. Training
 ```bash
 python B3_train_acla_anode.py
 ```
 
-### 2. Inference
+### 4. Preprocessing before inference
+```bash
+python B5a_preprocessing_infer.py
+python B5b_update_meta_user_car_infer.py
+```
+
+### 5. Inference
 ```bash
 python B6_inference_v2_mc.py
 ```
 
-### 3. Vẽ kết quả
+### 7. Vẽ kết quả
 ```bash
 python B7_plot_result.py
 ```

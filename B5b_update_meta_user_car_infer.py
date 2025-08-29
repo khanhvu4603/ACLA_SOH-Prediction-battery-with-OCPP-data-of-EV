@@ -24,23 +24,14 @@ pip install pandas numpy
 """
 
 # ============ CONFIG ============
-META_PATH = r"./output_data/ocpp_lstm_sessions.csv"              # meta do B1_prepocessing.py sinh
+META_PATH = r"E:\ACLA + ANODE\output_infer\ocpp_lstm_infer_sessions.csv"              # meta do B1_prepocessing.py sinh
 TRANSACTIONS_CSV = r"./data/transaction_fully_202508221207.csv"  # bảng transaction đầy đủ
 USER_TAG_CSV     = r"./data/tbl_user_tag_20250820_15h48.csv"      # map tag_id -> user_id (nếu có)
 USER_CAR_MODEL   = r"./data/tbl_user_car_model_20250820_14h01.csv" # map user_id -> car_id|car_model_id (nếu có)
 CAR_MODEL_MAP    = r"./data/car_model_id_with_car_type.csv"       # map car_model_id -> car_name|car_type (nếu có)
 CAR_TYPE_CAP     = r"./data/car_type_with_C_bolkWh.csv"           # map car_type -> C_bolkWh (nếu có)
 
-OUTPUT_PATH      = r"./output_data/ocpp_lstm_sessions_with_user_car.csv"
-
-# META_PATH = r"E:\ACLA + ANODE\output_infer\ocpp_lstm_infer_sessions.csv"              # meta do B1_prepocessing.py sinh
-# TRANSACTIONS_CSV = r"./data/transaction_fully_202508221207.csv"  # bảng transaction đầy đủ
-# USER_TAG_CSV     = r"./data/tbl_user_tag_20250820_15h48.csv"      # map tag_id -> user_id (nếu có)
-# USER_CAR_MODEL   = r"./data/tbl_user_car_model_20250820_14h01.csv" # map user_id -> car_id|car_model_id (nếu có)
-# CAR_MODEL_MAP    = r"./data/car_model_id_with_car_type.csv"       # map car_model_id -> car_name|car_type (nếu có)
-# CAR_TYPE_CAP     = r"./data/car_type_with_C_bolkWh.csv"           # map car_type -> C_bolkWh (nếu có)
-
-# OUTPUT_PATH      = r"./output_infer/ocpp_lstm_sessions_with_user_car.csv"
+OUTPUT_PATH      = r"./output_infer/ocpp_lstm_sessions_with_user_car.csv"
 # =================================
 
 import sys
